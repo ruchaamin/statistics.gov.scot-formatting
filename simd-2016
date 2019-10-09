@@ -1,0 +1,162 @@
+# -------------------------------------------------------------------------------------#
+# 0 - Information ----------------------------------------------------------------------
+# -------------------------------------------------------------------------------------#
+#
+# Script to take SIMD indicator data as published on gov.scot 
+# (downloaded from: https://www2.gov.scot/Resource/0053/00534452.xlsx) and reformat the 
+# Health, Education and Housing indicators ready for upload to statistics.gov.scot
+# 
+# Author: Rucha Amin (rucha.amin@gov.scot, x49513)
+# Date: August 2019
+# 
+# -------------------------------------------------------------------------------------#
+# 1 - Prepare Workspace and load in data -----------------------------------------------
+# -------------------------------------------------------------------------------------#
+
+# clear workspace
+rm(list = ls())
+
+# load in packages
+library(tidyverse)
+library(readxl)
+
+# read in data
+simd <- read_excel("./simd-data.xlsx", sheet = 3)
+
+# have a look
+head(simd)
+str(simd)
+dim(simd)
+colnames(simd)
+
+# -------------------------------------------------------------------------------------#
+# 2 - Reformat Health indicator --------------------------------------------------------
+# -------------------------------------------------------------------------------------#
+
+# pipe to convert data to tidy format, round to 2decimal place and 
+# add/rename columns/values required for statistics.gov.scot 
+
+simd_health <- simd %>%
+  select(Data_Zone, CIF, ALCOHOL, DRUG, SMR, DEPRESS, LBWT, EMERG) %>%
+  mutate(DEPRESS = DEPRESS * 100) %>%
+  mutate(LBWT = LBWT * 100) %>%
+  gather(key = "Indicator", value = "Value", -Data_Zone) %>%
+  mutate(Value = round(Value, digits = 2)) %>%
+  drop_na() %>%
+  mutate(Measurement = ifelse(Indicator == "CIF" | Indicator == "ALCOHOL" | Indicator == "DRUG" |
+                                Indicator == "SMR" | Indicator == "EMERG", "Index", "Percent")) %>%
+  
+  mutate(Units = ifelse(Indicator == "CIF", "Comparative Illness Factor (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)", 
+                        ifelse(Indicator == "ALCOHOL", "Hospital stays (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)",
+                               ifelse(Indicator == "DRUG", "Hospital stays (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)", 
+                                      ifelse (Indicator == "SMR", "Deaths (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)", 
+                                              ifelse(Indicator == "DEPRESS", "Percent Of People",
+                                                     ifelse(Indicator == "LBWT", "Percent Of Births", 
+                                                            ifelse(Indicator == "EMERG", "Hospital stays (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)", NA)))))))) %>%
+
+  mutate(DateCode = ifelse(Indicator == "CIF", "2015",
+                           ifelse(Indicator == "ALCOHOL", "2011-2014",
+                                  ifelse(Indicator == "DRUG", "2011-2014",
+                                         ifelse(Indicator == "SMR", "2011-2014",
+                                                ifelse(Indicator == "DEPRESS", "2014-2015",
+                                                       ifelse(Indicator == "LBWT", "2011-2014",
+                                                              ifelse(Indicator == "EMERG", "2011-2015", NA)))))))) %>%                                                        
+  
+  mutate(Indicator = str_replace_all(Indicator, c("CIF" = "Comparative illness factor", 
+                                                  "ALCOHOL" = "Hospital stays related to alcohol misuse",
+                                                  "DRUG" = "Hospital stays related to drug misuse", 
+                                                  "SMR" = "Standardised mortality ratio",
+                                                  "DEPRESS" = "Population prescribed drugs for anxiety, depression or psychosis", 
+                                                  "LBWT" = "Live singleton births of low birth weight", 
+                                                  "EMERG" = "Emergency stays in hospital"))) %>%
+
+  select(Data_Zone, DateCode, Measurement, Units, Value, Indicator) %>%
+  rename("GeographyCode" = Data_Zone) %>%
+  rename("SIMD Health Indicator" = Indicator) 
+
+
+
+# write out data file
+  
+write.csv(simd_health, "./output/simd_health.csv", row.names = F)
+
+# -------------------------------------------------------------------------------------#
+
+
+# -------------------------------------------------------------------------------------#
+# 3 - Reformat Education indicator -----------------------------------------------------
+# -------------------------------------------------------------------------------------#
+
+# pipe to convert data to tidy format, round to 2decimal place and 
+# add/rename columns/values required for statistics.gov.scot 
+
+simd_ed <- simd %>%
+  select(Data_Zone, Attendance, Attainment, Noquals, NEET, HESA) %>%
+  mutate(Attainment = as.numeric(Attainment)) %>%
+  mutate(HESA = HESA * 100) %>%
+  mutate(NEET = NEET * 100) %>%
+  mutate(Attendance = Attendance * 100) %>%
+  gather(key = Indicator, value = "Value", -Data_Zone) %>%
+  mutate(Value = round(Value, digits = 2)) %>%
+  drop_na() %>%
+  mutate(Measurement = ifelse(Indicator == "Attendance" | Indicator == "NEET" | Indicator == "HESA", "Percent", 
+                              ifelse(Indicator == "Attainment", "Score", "Index"))) %>%
+  
+  mutate(DateCode = ifelse(Indicator == "Attendance", "2012/13-2014/15",
+                           ifelse(Indicator == "NEET", "2012/13-2013/14",
+                                  ifelse(Indicator == "HESA", "2012/13-2014/15",
+                                         ifelse(Indicator == "Attainment", "2011/12-2014/15",
+                                                ifelse(Indicator == "Noquals", "2011", NA)))))) %>%
+  
+  mutate(Units = ifelse(Indicator == "Attendance", "Percent Of Pupils",
+                        ifelse(Indicator == "NEET", "Percent Of People",
+                               ifelse(Indicator == "HESA", "Percent Of People",
+                                      ifelse(Indicator == "Attainment", "Average Highest Qualification Score",
+                                             ifelse(Indicator == "Noquals", "People (Age-Sex standardised, 100 = Scotland average for a population with the same age and sex profile)", NA)))))) %>%
+
+  mutate(Indicator = str_replace_all(Indicator, c("Attendance" = "School pupil attendance",
+                                                  "Attainment" = "Attainment of school leavers",
+                                                  "Noquals" = "Working age people with no qualifications",
+                                                  "NEET" = "People aged 16-19 not in full time education, employment or training",
+                                                  "HESA" = "People aged 17-21 year entering in to full time higher education"))) %>%
+  select(Data_Zone, DateCode, Measurement, Units, Value, Indicator) %>%
+  rename("GeographyCode" = Data_Zone) %>%
+  rename("SIMD Education Indicator" = Indicator)
+
+write.csv(simd_ed, "./output/simd_ed.csv", row.names = F)
+
+# ------------------------------------------------------------------------------------#
+
+# -------------------------------------------------------------------------------------#
+# 4 - Reformat Housing indicator -------------------------------------------------------
+# -------------------------------------------------------------------------------------#
+
+simd_housing <- simd %>%
+  select(Data_Zone, overcrowded_count, overcrowded_rate, nocentralheat_count, nocentralheat_rate) %>%
+  mutate(overcrowded_rate = overcrowded_rate * 100) %>%
+  mutate(nocentralheat_rate = nocentralheat_rate * 100) %>%
+  gather(key = Indicator, value = "Value", -Data_Zone) %>%
+  mutate(Value = round(Value, digits = 2)) %>%
+  drop_na() %>%
+  mutate(Measurement = ifelse(Indicator == "overcrowded_count" | Indicator == "nocentralheat_count", "Count", "Percent")) %>%
+  mutate(Units = ifelse(Indicator == "overcrowded_count" | Indicator == "nocentralheat_count", "People", "Percent Of People")) %>%
+  mutate(DateCode = "2011") %>%
+  mutate(Indicator = str_replace_all(Indicator, c("overcrowded_count" = "People in households that are overcrowded",
+                                                  "overcrowded_rate" = "People in households that are overcrowded",
+                                                  "nocentralheat_count" = "People in households without central heating",
+                                                  "nocentralheat_rate" = "People in households without central heating"))) %>%
+  select(Data_Zone, DateCode, Measurement, Units, Value, Indicator) %>%
+  rename("GeographyCode" = Data_Zone) %>%
+  rename("SIMD Housing Indicator" = Indicator) 
+
+write.csv(simd_housing, "./output/simd_housing.csv", row.names = F)  
+  
+# ------------------------------------------------------------------------------------#  
+  
+  
+  
+# -------------------------------------------------------------------------------------#
+# END ----------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------#  
+  
+  
